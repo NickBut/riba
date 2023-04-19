@@ -1,0 +1,262 @@
+rules:
+- id: insecure-use-gets-fn
+  pattern: gets(...)
+  message: >-
+    Avoid using 'gets()'. This function, when used improperly, does not consider
+    buffer boundaries and can lead to buffer overflows. Use 'fgets()' instead
+    for reading input.
+  languages: [c]
+  severity: WARNING
+  metadata:
+    category: security
+    technology:
+    - c
+    impact: HIGH
+
+- id: extract-html-to-javascript
+  mode: extract
+  languages:
+    - html
+  pattern: <script>$...SCRIPT</script>
+  extract: $...SCRIPT
+  dest-language: javascript
+
+- id: extract-php-to-javascript
+  mode: extract
+  languages:
+    - generic
+  options:
+    generic_ellipsis_max_span: 500
+  pattern: ...<script>$...SCRIPT</script>
+  extract: $...SCRIPT
+  dest-language: javascript
+  paths:
+    include:
+      - "*.php"
+
+- id: postmessage-origin-validation
+  message: >-
+    No validation of origin is done by the addEventListener API. It may be possible to exploit this flaw
+    to perform Cross Origin attacks such as Cross-Site Scripting(XSS).
+  pattern: window.addEventListener('message', $FUNC, ...)
+  languages: [javascript]
+  metadata:
+    category: security
+    technology:
+    - browser
+    subcategory:
+    - audit
+    likelihood: LOW
+    impact: LOW
+    confidence: LOW
+  severity: WARNING
+
+- id: cors-misconfiguration
+  message: >-
+    By letting user input control CORS parameters, there is a risk that software does not properly verify
+    that the source of data. Use literal values for CORS settings.
+  mode: taint
+  languages:
+  - javascript
+  - typescript
+  metadata:
+    category: security
+    impact: MEDIUM
+  severity: WARNING
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: function ... ($REQ, $RES) {...}
+      - pattern: $VAR = $REQ.headers
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: |
+          $HEADS = {$HEADER: $VAR}
+    - focus-metavariable: $VAR
+    - metavariable-regex:
+        metavariable: $HEADER
+        regex: .*(Access-Control-Allow-Origin|access-control-allow-origin).*
+
+- id: js-open-redirect
+  message: >-
+    The application accepts potentially user-controlled input which
+    can control the location of the current window context. This can lead two
+    types of vulnerabilities open-redirection and Cross-Site-Scripting
+    (XSS) with JavaScript URIs. It is recommended to validate
+    user-controllable input before allowing it to control the redirection.
+  metadata:
+    interfile: true
+    category: security
+    confidence: HIGH
+    technology:
+    - browser
+    likelihood: HIGH
+    impact: MEDIUM
+  languages:
+  - javascript
+  - typescript
+  severity: WARNING
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          $PROPS = new URLSearchParams($WINDOW. ... .location.search)
+          ...
+    - pattern: $PROPS.get('...')
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: location = $SINK
+    - focus-metavariable: $SINK
+    - metavariable-pattern:
+        patterns:
+        - pattern-not: |
+            "..." + $VALUE
+        - pattern-not: |
+            `...${$VALUE}`
+        metavariable: $SINK
+
+- id: flask-template-string
+  message: >-
+    Found a template created with string formatting.
+    This is susceptible to server-side template injection
+    and cross-site scripting attacks.
+  metadata:
+    category: security
+    technology:
+    - flask
+    likelihood: LOW
+    impact: MEDIUM
+    confidence: LOW
+  languages: [python]
+  severity: ERROR
+  pattern-either:
+  - pattern: |
+      $V = "..." % $S
+      ...
+      return flask.render_template_string($V, ...)
+
+- id: path-traversal-open
+  languages:
+  - python
+  severity: ERROR
+  message: >-
+    Found request data in a call to 'open'. Ensure the request data is validated or sanitized, otherwise
+    it could result
+    in path traversal attacks.
+  metadata:
+    category: security
+    technology:
+    - flask
+    subcategory:
+    - audit
+    likelihood: MEDIUM
+    impact: HIGH
+    confidence: MEDIUM
+  pattern-either:
+  - patterns:
+    - pattern-inside: |
+        $INTERM = <... flask.request.$W.get(...) ...>
+        ...
+        open(<... $INTERM ...>, ...)
+    - pattern: open(...)
+
+- id: path-traversal-command-injection-save
+  languages:
+  - python
+  severity: ERROR
+  message: >-
+    Found request data in a call to 'save'. Ensure the request data is validated or sanitized, otherwise
+    it could result in path traversal or command injection attacks.
+  metadata:
+    category: security
+    technology:
+    - flask
+    subcategory:
+    - audit
+    likelihood: MEDIUM
+    impact: HIGH
+    confidence: MEDIUM
+  pattern-either:
+  - patterns:
+    - pattern-inside: |
+        $FILE = <... flask.request.$W[...] ...>
+        ...
+        $FILE.save(<... $FILE.filename ...>, ...)
+    - pattern: $FILE.save(...)
+
+- id: read-file-by-user-input-filename
+  severity: WARNING
+  message: >-
+    File name based on user input risks server-side request forgery.
+  metadata:
+    technology:
+    - php
+    category: security
+    impact: MEDIUM
+    likelihood: MEDIUM
+    confidence: MEDIUM
+  languages: [php]
+  mode: taint
+  pattern-sources:
+  - patterns:
+    - pattern-either:
+      - pattern: $_GET
+  pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern-inside: file_get_contents($FILENAME, ...)
+
+- id: broken-auth
+  severity: WARNING
+  message: >-
+    Found constant value in 'if' operator. a constant value can be
+    picked up and placed in the r.Cookie variable, which will lead to broken authorization
+  pattern-either:
+    - patterns:
+      - pattern: |
+          $FUNC($VAR.Value) == "..."
+  languages:
+    - go
+  metadata:
+    category: security
+    impact: MEDIUM
+    likelihood: MEDIUM
+    confidence: MEDIUM
+
+- id: sql-injection
+  severity: WARNING
+  message: >-
+    Found DB-request without sanitizing. It may cause SQL-Injection.
+  pattern-either:
+    - pattern: |
+        $VAR = $REQ.GET.get(..., ...)
+  languages:
+    - python
+  metadata:
+    category: security
+    impact: MEDIUM
+    likelihood: MEDIUM
+    confidence: MEDIUM
+
+- id: htmlspecialchars-php-under-8.1
+  severity: WARNING
+  message: >-
+    Using htmlspecialchars in php versions below 8.1,
+    there is a single quote vulnerability. Using this vulnerability,
+    an attacker can place js-script in the body of the site
+  pattern-either:
+    - patterns:
+      - pattern: |
+          htmlspecialchars($GET[...])
+  languages:
+    - php
+    - javascript
+  metadata:
+    category: security
+    impact: MEDIUM
+    likelihood: MEDIUM
+    confidence: MEDIUM
+  
